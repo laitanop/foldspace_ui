@@ -38,7 +38,7 @@ async function getTokenIdsFromOwner(
 
     const tokenIdsCall: {
         address: `0x${string}`;
-        abi: AbiFunction;
+        abi: any;
         functionName: string;
         args: (string | number)[];
     }[] = [];
@@ -68,7 +68,7 @@ async function getTokenIdsFromOwner(
 async function getTokensInfo(tokenIds: bigint[]): Promise<TokenInfo[]> {
     const tokenInfoCall: {
         address: `0x${string}`;
-        abi: AbiFunction;
+        abi: any;
         functionName: string;
         args: (string | number)[];
     }[] = [];

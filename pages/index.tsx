@@ -223,12 +223,12 @@ const Home: NextPage = () => {
             <Container maxWidth="sm">
                 {isConnected && address && (
                     <>
-                        <Box sx={{ typography: 'h2' }}>FoldSpace NFTs</Box>
+                        <Box sx={{ typography: 'h2' }}>FoldSpace NFT</Box>
                         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
                             <Tabs
                                 value={tabValue}
                                 onChange={handleTabChange}
-                                aria-label="FoldSpace NFTs tabs"
+                                aria-label="FoldSpace NFT tabs"
                             >
                                 <Tab label="Mint" />
                                 <Tab label="My NFTs" />
