@@ -3,14 +3,7 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import type { NextPage } from 'next';
-import {
-    Box,
-    Tab,
-    Tabs,
-    Typography,
-    Container,
-    CircularProgress,
-} from '@mui/material';
+import { Box, Tab, Tabs, Container, CircularProgress } from '@mui/material';
 import {
     type BaseError,
     useAccount,
@@ -19,7 +12,7 @@ import {
     useWriteContract,
     useWaitForTransactionReceipt,
 } from 'wagmi';
-import { formatEther, Address, isAddress, getAddress } from 'viem';
+import { isAddress, getAddress } from 'viem';
 import {
     foldspaceContractConfig,
     farcasterIdRegistryConfig,
@@ -29,6 +22,8 @@ import {
 import { TokenInfo } from '../utils/types';
 import MintForm from '../components/MintForm';
 import MyNFTs from '../components/MyNFTs';
+import MintHeaderInfo from '../components/MintHeaderInfo';
+import TrxStatusModal from '../components/TrxStatusModal';
 
 const FOLDSPACE_CONTRACT = process.env.NEXT_PUBLIC_FOLDSPACE_ADDRESS;
 
@@ -54,35 +49,9 @@ const Home: NextPage = () => {
     const [recipientAddress, setRecipientAddress] = useState<string>('');
     const [isRecipentAddressValid, setIsRecipientAddressValid] =
         useState<boolean>(true);
-    const [isPendingValidAddress, setIsPendingValidAddress] = useState(false);
 
-    const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-        setTabValue(newValue);
-    };
-
-    const handleAddressChange = (
-        event: React.ChangeEvent<HTMLInputElement>,
-    ): void => {
-        const inputAddress: string = event.target.value.trim();
-        setRecipientAddress(inputAddress);
-
-        // If the address is empty, it's considered valid (optional field)
-        if (!inputAddress && inputAddress.length === 0) {
-            setIsRecipientAddressValid(true);
-            return;
-        }
-
-        // Validate the address format if it's not empty
-        try {
-            if (isAddress(inputAddress)) {
-                setIsRecipientAddressValid(true);
-            } else {
-                setIsRecipientAddressValid(false);
-            }
-        } catch {
-            setIsRecipientAddressValid(false);
-        }
-    };
+    const [isOpenTrxStatusModalMint, setIsOpenTrxStatusModalMint] =
+        useState(false);
 
     const {
         data,
@@ -124,6 +93,34 @@ const Home: NextPage = () => {
         fid = fidOfAddress.result as bigint;
     }
 
+    const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+        setTabValue(newValue);
+    };
+
+    const handleAddressChange = (
+        event: React.ChangeEvent<HTMLInputElement>,
+    ): void => {
+        const inputAddress: string = event.target.value.trim();
+        setRecipientAddress(inputAddress);
+
+        // If the address is empty, it's considered valid (optional field)
+        if (!inputAddress && inputAddress.length === 0) {
+            setIsRecipientAddressValid(true);
+            return;
+        }
+
+        // Validate the address format if it's not empty
+        try {
+            if (isAddress(inputAddress)) {
+                setIsRecipientAddressValid(true);
+            } else {
+                setIsRecipientAddressValid(false);
+            }
+        } catch {
+            setIsRecipientAddressValid(false);
+        }
+    };
+
     const fetchTokenIds = async () => {
         if (address && balanceOf) {
             try {
@@ -156,15 +153,6 @@ const Home: NextPage = () => {
         }
     };
 
-    useEffect(() => {
-        fetchTokenIds();
-    }, [address, balanceOf]); // Re-run this effect if the 'address' changes
-
-    // Effect to fetch token info whenever tokenIds are updated
-    useEffect(() => {
-        fetchTokensInfo();
-    }, [tokenIds]); // Depends on tokenIds
-
     const { data: hash, isPending, error, writeContract } = useWriteContract();
 
     async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -196,6 +184,7 @@ const Home: NextPage = () => {
                 args: [recipient],
                 value: price,
             });
+            setIsOpenTrxStatusModalMint(true);
         }
         fetchTokenIds();
     }
@@ -204,26 +193,82 @@ const Home: NextPage = () => {
         fetchTokenIds();
     };
 
-    const { isLoading: isConfirming, isSuccess: isConfirmed } =
+    const handleTrxStatusModalMintClose = () => {
+        setIsOpenTrxStatusModalMint(false);
+        updateTokenCallback();
+    };
+
+    /*     const { isLoading: isConfirming, isSuccess: isConfirmed } =
         useWaitForTransactionReceipt({
             hash,
-        });
+        }); */
+
+    useEffect(() => {
+        fetchTokenIds();
+    }, [address, balanceOf]); // Re-run this effect if the 'address' changes
+
+    // Effect to fetch token info whenever tokenIds are updated
+    useEffect(() => {
+        fetchTokensInfo();
+    }, [tokenIds]); // Depends on tokenIds
 
     return (
         <div>
-            <div
-                style={{
-                    display: 'flex',
-                    justifyContent: 'flex-end',
-                    padding: 12,
-                }}
-            >
-                <ConnectButton showBalance={true} />
-            </div>
+            <Container maxWidth="lg">
+                {' '}
+                <div
+                    style={{
+                        display: 'flex',
+                        justifyContent: 'flex-end',
+                        padding: 12,
+                    }}
+                >
+                    <ConnectButton showBalance={true} />
+                </div>
+                <Box
+                    sx={{
+                        typography: 'h2',
+                        textAlign: 'center',
+                        marginTop: '20px',
+                    }}
+                >
+                    FoldSpace NFT
+                </Box>
+                {!isConnected && (
+                    <div
+                        style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            marginTop: '20px',
+                        }}
+                    >
+                        <Box
+                            sx={{
+                                typography: 'body1', // Use 'body1' or 'body2' for paragraph text as 'paragraph' is not a valid value
+                                textAlign: 'center',
+                                marginTop: '20px',
+                            }}
+                        >
+                            Connect your wallet to foldspace into Farcaster
+                        </Box>
+                        <Box
+                            component="img"
+                            src="/images/gate.webp"
+                            alt="FoldSpace Landing Image"
+                            sx={{
+                                width: '100%', // Make the image responsive
+                                maxWidth: '600px', // Adjust this value based on your design requirements
+                                height: 'auto', // Maintain aspect ratio
+                                marginTop: '20px',
+                            }}
+                        />
+                    </div>
+                )}
+            </Container>
             <Container maxWidth="sm">
                 {isConnected && address && (
                     <>
-                        <Box sx={{ typography: 'h2' }}>FoldSpace NFT</Box>
                         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
                             <Tabs
                                 value={tabValue}
@@ -255,38 +300,6 @@ const Home: NextPage = () => {
                                     </div>
                                 ) : (
                                     <>
-                                        {
-                                            <div>
-                                                {/* use box for typography */}
-                                                {fid && fid > 0n ? (
-                                                    <Box
-                                                        sx={{
-                                                            typography:
-                                                                'paragraph',
-                                                        }}
-                                                    >{`Connected Wallet Registered FID: ${fid}`}</Box>
-                                                ) : (
-                                                    <Box
-                                                        sx={{
-                                                            typography:
-                                                                'paragraph',
-                                                        }}
-                                                    >{`Wallet has no registered FID`}</Box>
-                                                )}
-                                                <div>
-                                                    <Box
-                                                        sx={{
-                                                            typography:
-                                                                'paragraph',
-                                                        }}
-                                                    >
-                                                        Number of FoldSpace NFTs
-                                                        Owned:{' '}
-                                                        {balanceOf.toString()}{' '}
-                                                    </Box>
-                                                </div>
-                                            </div>
-                                        }{' '}
                                         {isLoading ? (
                                             <div
                                                 style={{
@@ -300,19 +313,17 @@ const Home: NextPage = () => {
                                         ) : (
                                             <>
                                                 {price && (
-                                                    <Box
-                                                        sx={{
-                                                            typography:
-                                                                'paragraph',
-                                                        }}
-                                                    >
-                                                        Price to Mint in ETH:{' '}
-                                                        {formatEther(price)}
-                                                    </Box>
+                                                    <MintHeaderInfo
+                                                        fid={fid}
+                                                        balanceOf={balanceOf}
+                                                        price={price}
+                                                    />
                                                 )}
 
                                                 <MintForm
-                                                    isPending={isPending}
+                                                    isLoading={
+                                                        isLoading || isPending
+                                                    }
                                                     isRecipentAddressValid={
                                                         isRecipentAddressValid
                                                     }
@@ -324,35 +335,7 @@ const Home: NextPage = () => {
                                                     }
                                                     submit={submit}
                                                 />
-                                                {hash && (
-                                                    <div>
-                                                        Transaction:
-                                                        https://optimistic.etherscan.io/tx/
-                                                        {hash}
-                                                    </div>
-                                                )}
                                             </>
-                                        )}
-                                        {isConfirming && (
-                                            <div
-                                                style={{
-                                                    display: 'flex',
-                                                    justifyContent: 'center',
-                                                    padding: '20px',
-                                                }}
-                                            >
-                                                <CircularProgress />
-                                            </div>
-                                        )}
-                                        {isConfirmed && (
-                                            <div>Transaction confirmed.</div>
-                                        )}
-                                        {error && (
-                                            <div>
-                                                Error:{' '}
-                                                {(error as BaseError).stack ||
-                                                    error.message}
-                                            </div>
                                         )}
                                     </>
                                 )}
@@ -361,10 +344,20 @@ const Home: NextPage = () => {
                         {tabValue === 1 && (
                             <MyNFTs
                                 tokensInfo={tokensInfo}
+                                hasFid={fid && fid > 0n ? true : false}
                                 updateTokenCallback={updateTokenCallback}
                             />
                         )}
                     </>
+                )}
+                {hash && (
+                    <TrxStatusModal
+                        isOpen={isOpenTrxStatusModalMint}
+                        onClose={handleTrxStatusModalMintClose}
+                        hash={hash}
+                        confirmingText="Confirming mint transaction..."
+                        confirmedText="Mint Transaction confirmed!"
+                    />
                 )}
             </Container>
         </div>

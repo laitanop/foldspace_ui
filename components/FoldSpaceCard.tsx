@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { Address } from 'viem';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Typography from '@mui/material/Typography';
@@ -13,32 +12,64 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import TextField from '@mui/material/TextField';
-import { useWriteContract, useAccount } from 'wagmi';
+import {
+    useWriteContract,
+    useAccount,
+    useWalletClient,
+    useSignTypedData,
+} from 'wagmi';
+import { verifyTypedData } from 'viem';
+import TrxStatusModal from '../components/TrxStatusModal';
 import { TokenInfo } from '../utils/types';
 import { foldspaceContractConfig } from '../utils/foldspace';
+import {
+    IdRegistryTransferMessage,
+    ID_REGISTRY_EIP_712_TYPES,
+} from '../utils/farcaster';
 
 interface FoldSpaceCardProps {
     tokenInfo: TokenInfo;
+    hasFid: boolean;
     tokenUpdateCallback: () => void;
-    //onClaim: (tokenId: bigint) => Promise<void>;
 }
 
 const FoldSpaceCard: React.FC<FoldSpaceCardProps> = ({
     tokenInfo,
+    hasFid,
     tokenUpdateCallback,
 }) => {
     const { address } = useAccount();
-    const { tokenId, FID } = tokenInfo;
+    const {
+        data: walletClient,
+        isError,
+        isLoading: isLoadingWallet,
+    } = useWalletClient();
+    const { tokenId, FID, claimed } = tokenInfo;
     const [isTransferLoading, setIsTransferLoading] = useState(false);
     const [openDialog, setOpenDialog] = useState(false);
     const [ethereumAddress, setEthereumAddress] = useState('');
+    const [isClaimLoading, setIsClaimLoading] = useState(false);
+    const [isOpenTrxStatusModalTransfer, setIsOpenTrxStatusModalTransfer] =
+        useState(false);
+    const [isOpenTrxStatusModalClaim, setIsOpenTrxStatusModalClaim] =
+        useState(false);
 
     const {
-        data: transferHash,
-        isPending: isPendingTransfer,
-        error: transferError,
-        writeContract,
+        data: hashForTransfer,
+        isPending: isPendingTransactionTransfer,
+        error: tranferError,
+
+        writeContract: writeContractForTransfer,
     } = useWriteContract();
+
+    const {
+        data: hashForClaim,
+        isPending: isPendingTransactionClaim,
+        error: claimError,
+        writeContract: writeContractForClaim,
+    } = useWriteContract();
+
+    const { signTypedDataAsync } = useSignTypedData();
 
     const handleOpenDialog = () => {
         setOpenDialog(true);
@@ -63,11 +94,12 @@ const FoldSpaceCard: React.FC<FoldSpaceCardProps> = ({
             if (ethereumAddress === '') {
                 throw new Error('Ethereum address is empty');
             }
-            writeContract({
+            writeContractForTransfer({
                 ...foldspaceContractConfig,
                 functionName: 'transferFrom',
                 args: [address, ethereumAddress, tokenId],
             });
+            setIsOpenTrxStatusModalTransfer(true);
         } catch (error) {
             console.error('Transfer failed:', error);
         } finally {
@@ -76,18 +108,94 @@ const FoldSpaceCard: React.FC<FoldSpaceCardProps> = ({
         }
     };
 
+    const handleClaimClick = async () => {
+        setIsClaimLoading(true);
+        try {
+            if (address === undefined) {
+                throw new Error('Address is undefined');
+            }
+            if (walletClient === undefined) {
+                throw new Error('Wallet client is undefined');
+            }
+            const deadline = BigInt(
+                Math.floor(Date.now() / 1000) + 4 * 60 * 60, // 4 hours * 60 minutes * 60 seconds
+            );
+
+            // const deadline = BigInt(Math.floor(Date.now() / 1000));
+            console.log('Deadline:', deadline);
+
+            let message: IdRegistryTransferMessage = {
+                fid: FID,
+                to: address,
+                nonce: 0n,
+                deadline,
+            };
+            console.log('Signing message');
+            const signature = await signTypedDataAsync({
+                ...ID_REGISTRY_EIP_712_TYPES,
+                primaryType: 'Transfer',
+                message,
+            });
+
+            console.log('Signing result');
+            console.log(signature);
+
+            const verified = await verifyTypedData({
+                address,
+                ...ID_REGISTRY_EIP_712_TYPES,
+                primaryType: 'Transfer',
+                message,
+                signature,
+            });
+
+            console.log('verifyfing..');
+
+            if (!verified) {
+                throw new Error('Signature verification failed');
+            }
+
+            console.log('verified');
+
+            writeContractForClaim({
+                ...foldspaceContractConfig,
+                functionName: 'claimFid',
+                args: [tokenId, deadline, signature],
+            });
+
+            console.log('writing contract to claim FID');
+            setIsOpenTrxStatusModalClaim(true);
+        } catch (error) {
+            console.error('Claim error:', error); // Handle error
+        } finally {
+            setIsClaimLoading(false);
+        }
+    };
+
+    const handleTrxStatusModalTransferClose = () => {
+        setIsOpenTrxStatusModalTransfer(false); // Close the transfer modal
+        tokenUpdateCallback();
+    };
+
+    const handleTrxStatusModalClaimClose = () => {
+        setIsOpenTrxStatusModalClaim(false); // Close the claim modal
+    };
+
+    const isClaimFidLoading = isClaimLoading || isPendingTransactionClaim;
+    const disableClaim = hasFid || claimed;
+    const disableTransfer = isTransferLoading || isPendingTransactionTransfer;
+
     return (
         <Card sx={{ minWidth: 275, margin: 2 }}>
             <CardContent>
                 <Typography variant="h5" component="div">
-                    Token ID: {tokenId.toString()}
+                    Token ID: {tokenId?.toString()}
                 </Typography>
                 <Divider sx={{ my: 1 }} />
                 <Typography
                     variant="body1"
                     sx={{ display: 'flex', justifyContent: 'space-between' }}
                 >
-                    FID: <span>{FID.toString()}</span>
+                    FID: {FID?.toString()}
                 </Typography>
                 <Box
                     sx={{
@@ -99,10 +207,68 @@ const FoldSpaceCard: React.FC<FoldSpaceCardProps> = ({
                 >
                     <Button
                         variant="contained"
-                        color="primary"
+                        color="secondary"
                         onClick={handleOpenDialog}
+                        disabled={disableTransfer}
+                        sx={{ position: 'relative' }}
                     >
-                        Transfer
+                        {disableTransfer ? (
+                            <>
+                                <CircularProgress
+                                    size={24}
+                                    sx={{
+                                        color: 'white', // Assuming you want the spinner to be white for better visibility on a secondary button
+                                        position: 'absolute',
+                                        top: '50%',
+                                        left: '50%',
+                                        marginTop: '-12px', // Half of size to vertically center
+                                        marginLeft: '-12px', // Half of size to horizontally center
+                                    }}
+                                />
+                                Loading...{' '}
+                            </>
+                        ) : (
+                            'Transfer'
+                        )}
+                    </Button>
+                </Box>
+                <Box
+                    sx={{
+                        mt: 2,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 2,
+                    }}
+                >
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={handleClaimClick}
+                        disabled={isClaimFidLoading || disableClaim}
+                        sx={{ position: 'relative' }}
+                    >
+                        {isClaimFidLoading ? (
+                            <>
+                                <CircularProgress
+                                    size={24}
+                                    sx={{
+                                        color: 'white', // Assuming you want the spinner to be white to contrast with a primary colored button
+                                        position: 'absolute',
+                                        top: '50%',
+                                        left: '50%',
+                                        marginTop: '-12px', // Half of size to center vertically
+                                        marginLeft: '-12px', // Half of size to center horizontally
+                                    }}
+                                />
+                                Claiming...{' '}
+                            </>
+                        ) : hasFid ? (
+                            'User already has an FID' // Custom message for when hasFid is true
+                        ) : claimed ? (
+                            'Fid Already Claimed' // Message for when claimed is true
+                        ) : (
+                            'Sign and Claim' // Default message
+                        )}
                     </Button>
                 </Box>
             </CardContent>
@@ -153,6 +319,25 @@ const FoldSpaceCard: React.FC<FoldSpaceCardProps> = ({
                     </Button>
                 </DialogActions>
             </Dialog>
+            {hashForTransfer && (
+                <TrxStatusModal
+                    isOpen={isOpenTrxStatusModalTransfer}
+                    onClose={handleTrxStatusModalTransferClose}
+                    callback={tokenUpdateCallback}
+                    hash={hashForTransfer}
+                    confirmingText="Confirming transfer transaction..."
+                    confirmedText="Transfer Transaction confirmed!"
+                />
+            )}
+            {hashForClaim && (
+                <TrxStatusModal
+                    isOpen={isOpenTrxStatusModalClaim}
+                    onClose={handleTrxStatusModalClaimClose}
+                    hash={hashForClaim}
+                    confirmingText="Confirming claim transaction..."
+                    confirmedText="Claim Transaction confirmed!"
+                />
+            )}
         </Card>
     );
 };
