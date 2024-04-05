@@ -23,6 +23,7 @@ import MyNFTs from '../components/MyNFTs';
 import MintHeaderInfo from '../components/MintHeaderInfo';
 import TrxStatusModal from '../components/TrxStatusModal';
 import Footer from '../components/Footer';
+import { checkInsufficientFundsError } from '../utils/errorMessge';
 
 const FOLDSPACE_CONTRACT = process.env.NEXT_PUBLIC_FOLDSPACE_ADDRESS;
 
@@ -332,6 +333,11 @@ const Home: NextPage = () => {
                                                     }
                                                     submit={submit}
                                                 />
+                                                <div className="error center pt-3 text-xl">
+                                                    {checkInsufficientFundsError(
+                                                        error,
+                                                    )}
+                                                </div>
                                             </>
                                         )}
                                     </>

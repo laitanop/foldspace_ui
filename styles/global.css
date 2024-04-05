@@ -6,3 +6,18 @@ body {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }
+.error {
+    color: red;
+}
+.center {
+    text-align: center;
+}
+.pt-3 {
+    padding-top: 1rem;
+}
+.pt-5 {
+    padding-top: 3rem;
+}
+.text-xl {
+    font-size: 1.25rem;
+}
